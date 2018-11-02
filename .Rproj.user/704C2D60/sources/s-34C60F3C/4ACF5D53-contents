@@ -1,0 +1,3 @@
+# getwd()
+# #dir "/Users/AleAviP/Dropbox/pseudomarginals-project/pseudomarginals"
+# devtools::build_vignettes()

@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1540906341450.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "3C43FA2D",
+    "lastKnownWriteTime" : 1541146348,
+    "last_content_update" : 1541146348973,
+    "path" : "~/BFR.BE/R/BFR.BE.EM.CV.R",
+    "project_path" : "R/BFR.BE.EM.CV.R",
+    "properties" : {
+        "cursorPosition" : "9,69",
+        "scrollLine" : "6",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,10 @@
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/BE.BFA.EM/R/BFA.EM.BE.CV.V1.R")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/BE.BFA.EM/R/BFA.EM.BE.FUN.CV.V1.R")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Veronikas/FA_CODE/FACTOR_CODE_update.R")
+
+Normal_10=BFA.EM.BE(x=Y, q = 10, eps = 0.001,it=100, epsM=0.05, prior="Normal",varianceBE=FALSE,varimax=(min(fnNormal10r,fnNormal10rjk)<=min(fnNormal10nr,fnNormal10nrjk)))
+
+Normal_10_2=BFR.BE.EM.CV(x=Y, q = 10, eps = 0.001,it=100, epsM=0.05, prior="Normal",varianceBE=FALSE,CV=TRUE)
+
+Normal_10_3=BFR.BE.EM.CV(x=Y, q = 10, eps = 0.001,it=100, epsM=0.05, prior="Normal",
+                         varianceBE=FALSE,varimax=TRUE,CV=FALSE)

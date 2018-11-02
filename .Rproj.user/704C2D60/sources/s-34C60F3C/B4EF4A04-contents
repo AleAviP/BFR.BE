@@ -1,0 +1,103 @@
+require(xtable)
+####SPARSE###
+####n=100 p=1,000####
+t1.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset01")
+t2.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset02")
+t3.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset03")
+t4.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset04")
+t5.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset05")
+t6.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset06")
+t7.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset07")
+t8.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset08")
+t9.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset09")
+t10.1000.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1000q10NBv2Dataset10")
+
+#Table Paper
+table1.1000.S=data.frame(#q_star=t1.1000.S[,2],
+                       #q_hat=round(apply(cbind(t1.1000.S[,3],t2.1000.S[,3],t3.1000.S[,3],t4.1000.S[,3],t5.1000.S[,3],t6.1000.S[,3],t7.1000.S[,3],t8.1000.S[,3],t9.1000.S[,3],t10.1000.S[,3]),1,median),1),
+                       q_hat=round(apply(cbind(t1.1000.S[,2],t2.1000.S[,2],t3.1000.S[,2],t4.1000.S[,2],t5.1000.S[,2],t6.1000.S[,2],t7.1000.S[,2],t8.1000.S[,2],t9.1000.S[,2],t10.1000.S[,2]),1,median),1),
+                       M_hat=round(apply(cbind(t1.1000.S[,3],t2.1000.S[,3],t3.1000.S[,3],t4.1000.S[,3],t5.1000.S[,3],t6.1000.S[,3],t7.1000.S[,3],t8.1000.S[,3],t9.1000.S[,3],t10.1000.S[,3]),1,median),1),
+                       FN_ZM=round(apply(cbind(t1.1000.S[,4],t2.1000.S[,4],t3.1000.S[,4],t4.1000.S[,4],t5.1000.S[,4],t6.1000.S[,4],t7.1000.S[,4],t8.1000.S[,4],t9.1000.S[,4],t10.1000.S[,4]),1,median),1),
+                       FN_covX=round(apply(cbind(t1.1000.S[,5],t2.1000.S[,5],t3.1000.S[,5],t4.1000.S[,5],t5.1000.S[,5],t6.1000.S[,5],t7.1000.S[,5],t8.1000.S[,5],t9.1000.S[,5],t10.1000.S[,5]),1,median),1),
+                       it=round(apply(cbind(t1.1000.S[,6],t2.1000.S[,6],t3.1000.S[,6],t4.1000.S[,6],t5.1000.S[,6],t6.1000.S[,6],t7.1000.S[,6],t8.1000.S[,6],t9.1000.S[,6],t10.1000.S[,6]),1,median),1))
+
+rownames(table1.1000.S)<-t1.1000.S[,1]
+table1.1000.S[c(6,12),5]<-"NA"
+####n=100 p=1,500####
+t1.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset01")
+t2.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset02")
+t3.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset03")
+t4.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset04")
+t5.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset05")
+t6.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset06")
+t7.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset07")
+t8.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset08")
+t9.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset09")
+t10.1500.S<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809SparseMn100p1500q10NBv2Dataset10")
+
+#Table Paper
+table1.1500.S=data.frame(q_hat=round(apply(cbind(t1.1500.S[,2],t2.1500.S[,2],t3.1500.S[,2],t4.1500.S[,2],t5.1500.S[,2],t6.1500.S[,2],t7.1500.S[,2],t8.1500.S[,2],t9.1500.S[,2],t10.1500.S[,2]),1,median),1),
+                         M_hat=round(apply(cbind(t1.1500.S[,3],t2.1500.S[,3],t3.1500.S[,3],t4.1500.S[,3],t5.1500.S[,3],t6.1500.S[,3],t7.1500.S[,3],t8.1500.S[,3],t9.1500.S[,3],t10.1500.S[,3]),1,median),1),
+                         FN_ZM=round(apply(cbind(t1.1500.S[,4],t2.1500.S[,4],t3.1500.S[,4],t4.1500.S[,4],t5.1500.S[,4],t6.1500.S[,4],t7.1500.S[,4],t8.1500.S[,4],t9.1500.S[,4],t10.1500.S[,4]),1,median),1),
+                         FN_covX=round(apply(cbind(t1.1500.S[,5],t2.1500.S[,5],t3.1500.S[,5],t4.1500.S[,5],t5.1500.S[,5],t6.1500.S[,5],t7.1500.S[,5],t8.1500.S[,5],t9.1500.S[,5],t10.1500.S[,5]),1,median),1),
+                         it=round(apply(cbind(t1.1500.S[,6],t2.1500.S[,6],t3.1500.S[,6],t4.1500.S[,6],t5.1500.S[,6],t6.1500.S[,6],t7.1500.S[,6],t8.1500.S[,6],t9.1500.S[,6],t10.1500.S[,6]),1,median),1))
+
+rownames(table1.1500.S)<-t1.1500.S[,1]
+table1.1500.S[c(6,12),5]<-"NA"
+
+#xtable(cbind(table1.1000.S,table1.1500.S[,-1]),digits=c(0,0,1,1,1,1,1,1,1,1,1,1))
+
+####FIX###
+####n=100 p=1,000####
+####n=100 p=1,000####
+t1.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset01")
+t2.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset02")
+t3.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset03")
+t4.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset04")
+t5.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset05")
+t6.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset06")
+t7.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset07")
+t8.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset08")
+t9.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset09")
+t10.1000.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1000q10NBv2Dataset10")
+
+#Table Paper
+table1.1000.F=data.frame(q_hat=round(apply(cbind(t1.1000.F[,2],t2.1000.F[,2],t3.1000.F[,2],t4.1000.F[,2],t5.1000.F[,2],t6.1000.F[,2],t7.1000.F[,2],t8.1000.F[,2],t9.1000.F[,2],t10.1000.F[,2]),1,median),1),
+                         M_hat=round(apply(cbind(t1.1000.F[,3],t2.1000.F[,3],t3.1000.F[,3],t4.1000.F[,3],t5.1000.F[,3],t6.1000.F[,3],t7.1000.F[,3],t8.1000.F[,3],t9.1000.F[,3],t10.1000.F[,3]),1,median),1),
+                         FN_ZM=round(apply(cbind(t1.1000.F[,4],t2.1000.F[,4],t3.1000.F[,4],t4.1000.F[,4],t5.1000.F[,4],t6.1000.F[,4],t7.1000.F[,4],t8.1000.F[,4],t9.1000.F[,4],t10.1000.F[,4]),1,median),1),
+                         FN_covX=round(apply(cbind(t1.1000.F[,5],t2.1000.F[,5],t3.1000.F[,5],t4.1000.F[,5],t5.1000.F[,5],t6.1000.F[,5],t7.1000.F[,5],t8.1000.F[,5],t9.1000.F[,5],t10.1000.F[,5]),1,median),1),
+                         it=round(apply(cbind(t1.1000.F[,6],t2.1000.F[,6],t3.1000.F[,6],t4.1000.F[,6],t5.1000.F[,6],t6.1000.F[,6],t7.1000.F[,6],t8.1000.F[,6],t9.1000.F[,6],t10.1000.F[,6]),1,median),1))
+
+rownames(table1.1000.F)<-t1.1000.F[,1]
+table1.1000.F[c(6,12),5]<-"NA"
+
+####n=100 p=1,500####
+t1.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset01")
+t2.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset02")
+t3.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset03")
+t4.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset04")
+t5.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset05")
+t6.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset06")
+t7.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset07")
+t8.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset08")
+t9.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset09")
+t10.1500.F<-read.csv("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Examples/Paper1806/Table1809FixMn100p1500q10NBv2Dataset10")
+
+#Table Paper
+table1.1500.F=data.frame(q_hat=round(apply(cbind(t1.1500.F[,2],t2.1500.F[,2],t3.1500.F[,2],t4.1500.F[,2],t5.1500.F[,2],t6.1500.F[,2],t7.1500.F[,2],t8.1500.F[,2],t9.1500.F[,2],t10.1500.F[,2]),1,median),1),
+                         M_hat=round(apply(cbind(t1.1500.F[,3],t2.1500.F[,3],t3.1500.F[,3],t4.1500.F[,3],t5.1500.F[,3],t6.1500.F[,3],t7.1500.F[,3],t8.1500.F[,3],t9.1500.F[,3],t10.1500.F[,3]),1,median),1),
+                         FN_ZM=round(apply(cbind(t1.1500.F[,4],t2.1500.F[,4],t3.1500.F[,4],t4.1500.F[,4],t5.1500.F[,4],t6.1500.F[,4],t7.1500.F[,4],t8.1500.F[,4],t9.1500.F[,4],t10.1500.F[,4]),1,median),1),
+                         FN_covX=round(apply(cbind(t1.1500.F[,5],t2.1500.F[,5],t3.1500.F[,5],t4.1500.F[,5],t5.1500.F[,5],t6.1500.F[,5],t7.1500.F[,5],t8.1500.F[,5],t9.1500.F[,5],t10.1500.F[,5]),1,median),1),
+                         it=round(apply(cbind(t1.1500.F[,6],t2.1500.F[,6],t3.1500.F[,6],t4.1500.F[,6],t5.1500.F[,6],t6.1500.F[,6],t7.1500.F[,6],t8.1500.F[,6],t9.1500.F[,6],t10.1500.F[,6]),1,median),1))
+
+rownames(table1.1500.F)<-t1.1500.F[,1]
+table1.1500.F[c(6,12),5]<-"NA"
+
+#xtable(cbind(table1.1000.F,table1.1500.F[,-1]),digits=c(0,0,1,1,1,1,1,1,1,1,1,1))
+
+####TABLE ALL PAPER###
+table.all<-rbind(cbind(rbind(table1.1000.F[c(7:9,11:12),],table1.1000.F[c(1:3,5:6),]),
+                       rbind(table1.1500.F[c(7:9,11:12),],table1.1500.F[c(1:3,5:6),])),
+                 cbind(rbind(table1.1000.S[c(7:9,11:12),],table1.1000.S[c(1:3,5:6),]),
+                       rbind(table1.1500.S[c(7:9,11:12),],table1.1500.S[c(1:3,5:6),])))
+xtable(table.all,digits=c(0,rep(1,10)))

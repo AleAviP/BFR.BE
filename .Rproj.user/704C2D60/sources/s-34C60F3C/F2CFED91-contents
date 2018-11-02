@@ -1,0 +1,240 @@
+library(rmutil)
+library(mombf)
+#####FUNCTIONS####
+##NORMAL
+dgammaSSL <- function(m,l0,l1,g.theta){
+  ratio <- (1-g.theta)/g.theta * sqrt(l1/l0) * exp(-1/2*(m^2)*(1/l0-1/l1))
+  density <- 1/(1+ratio)
+  return(density)
+}
+
+##MOM
+dgammapMOM <- function(m,l0,l1,g.theta){
+  ratio <- (1-g.theta)/g.theta * sqrt(l1/l0) *l1/(m^2)* exp(-1/2*(m^2)*(1/l0-1/l1))
+  density <- 1/(1+ratio)
+  return(density)
+}
+
+##Laplace
+dgammaLaplace <- function(m,l0,l1,g.theta){
+  ratio <- (1-g.theta)/g.theta * l1/l0 *exp(-abs(m)*(1/l0-1/l1))
+  #density <- 1-1/(1+ratio)
+  density <- 1/(1+ratio)
+  return(density)
+}
+
+##MoMLaplace
+dgammapMoMLaplace <- function(m,l0,l1,g.theta){
+  ratio <- (1-g.theta)/g.theta * l1/l0* 2*l1^2/(m^2) *exp(-abs(m)*(1/l0-1/l1))
+  #density <- 1-1/(1+ratio)
+  density <- 1/(1+ratio)
+  return(density)
+}
+
+##MoMLaplace F
+F_MOM_Laplace<-function(x,l1){
+  if(x<0){
+    exp(x/l1) *(x^2/(4*l1^2)-x/(2*l1)+1/2)
+  }
+  else{
+    1-(exp(-x/l1) *(x^2/(4*l1^2)+x/(2*l1)+1/2))
+  }
+}
+
+##MoMLaplace f
+f_MOM_Laplace<-function(x,l1){
+  x^2/(4*l1^3)*exp(-abs(x)/l1)
+}
+
+#######Matching with variance of MOM#####
+seq <- seq(-1,1,length=1000)
+g.theta<-0.5
+#####Normal-Spike-and-MOM-Slab####
+lambda.aux<-seq(0.2842010,0.2842196,length=50) 
+mjk<-1-(pmom(sqrt(.1),lambda.aux)-pmom(-sqrt(.1),lambda.aux))
+cbind(lambda.aux,mjk)
+l1_MOM=lambda.aux[38]
+l0_MOM=.1/qnorm(.975)^2
+MOM<-dgammapMOM(seq,l0_MOM,l1_MOM,g.theta)
+
+#####Normal-Spike-and-Slab####
+l0=l0_MOM
+l1=3*(l1_MOM)
+Normal<-dgammaSSL(seq,l0,l1,g.theta)
+
+####Laplace-Spike-and-MOM-Slab: Matching non-important values and quantile of Normal-Slab
+lambda.aux3<-seq(0.3867309,0.3867360,length=100)
+l1_MOMl_aux<-F_MOM_Laplace(-sqrt(.1),lambda.aux3)
+cbind(2*l1_MOMl_aux,lambda.aux3)
+l1_MOML<-lambda.aux3[27]
+1-(F_MOM_Laplace(sqrt(.1),l1_MOML)-F_MOM_Laplace(-sqrt(.1),l1_MOML))
+l0_MOML<- (-sqrt(.1))/log(.05)
+plaplace(sqrt(.1), m=0, s=l0_MOML)-plaplace(-sqrt(.1), m=0, s=l0_MOML)
+MoMLaplace<-dgammapMoMLaplace(seq,l0_MOML,l1_MOML,g.theta)
+l1_MOML2<-0.471371
+MoMLaplace2<-dgammapMoMLaplace(seq,l0_MOML,l1_MOML2,g.theta)
+
+
+####Laplace-Spike-and-Slab: Matching non-important values and quantile of Normal-Slab
+l1_L=6*l1_MOML
+l0_L=l0_MOML
+Laplace<-dgammaLaplace(seq,l0_L,l1_L,g.theta)
+l1_L2=6*l1_MOML2
+Laplace2<-dgammaLaplace(seq,l0_L,l1_L2,g.theta)
+
+######PLOTS#####
+plot(seq, MOM, type="l", xlab= expression(m[jk]), ylab="probability",
+     col="indianred3", cex.lab=1.25)
+lines(seq,Normal,lty=1,col="black")
+lines(seq,Laplace,lty=2,col="black")
+lines(seq,MoMLaplace,lty=2,col="indianred3")
+#abline(h=.95,lty=3,col="darkblue")
+abline(h=.05,lty=3,col="darkblue")
+
+plot(seq, MOM, type="l", xlab= "", ylab="",col="indianred3")
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",gamma[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+lines(seq,Normal,lty=2,col="darkblue")
+
+plot(seq, MoMLaplace, type="l", xlab="", ylab="",col="indianred3")
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",gamma[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+lines(seq,Laplace,lty=2,col="darkblue")
+
+####OPTION 2
+plot(seq, MOM, type="l", xlab= expression(m[jk]), ylab="probability",
+     col="indianred3", cex.lab=1.25)
+lines(seq,Normal,lty=1,col="black")
+lines(seq,Laplace2,lty=2,col="black")
+lines(seq,MoMLaplace2,lty=2,col="indianred3")
+#abline(h=.95,lty=3,col="darkblue")
+abline(h=.05,lty=3,col="darkblue")
+abline(v=-0.1718345,lty=3,col="darkblue")
+abline(v=0.1718345,lty=3,col="darkblue")
+
+######OTHER PLOTS#####
+seq2 <- seq(-5,5,length=10000)
+Spike<- dnorm(seq2,0,sqrt(l0))
+Slab<-dnorm(seq2,0,sqrt(l1))
+plot(seq2, Spike, type="l", xlab="m", ylab="P(m)",
+     main="Normal-Spike-and-Slab",lwd=2)
+lines(seq2, Slab,lty=2, col="darkblue", lwd=2)
+
+#####Laplace####
+SpikeL<- dlaplace(seq2,0,l0_L)
+#SlabL<-l1L/2*exp(-l1L*abs(seq))
+SlabL<-dlaplace(seq2,0,l1_L)
+plot(seq2, SpikeL, type="l", xlab= expression(m[jk]), ylab=expression("P("~m[jk]~"|.)"), 
+     lwd=2, cex.lab=1.25)
+     #main="Laplace-Spike-and-Slab", lwd=2)
+lines(seq2, SlabL,lty=2, col="darkblue", lwd=2)
+
+#####Non-local####
+#####Normal-pMoM####
+SlabpMoM<-dmom(seq2,tau=l1_MOM)
+plot(seq2, Spike, type="l", xlab="" , ylab="", lwd=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",m[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+lines(seq2, SlabpMoM,col="indianred3", lwd=2)
+lines(seq2, Slab,lty=2, col="darkblue", lwd=2)
+
+#####Laplace-pMoM####
+SlabpMoML<-seq2^2/(2*l1_MOML^2)*1/(2*l1_MOML)*exp(-abs(seq2)/l1_MOML)
+plot(seq2, SpikeL, type="l", xlab="" , ylab="", lwd=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",m[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+     #main="Prior Laplace-Spike", lwd=2)
+lines(seq2, SlabpMoML,col="indianred3", lwd=2)
+lines(seq2, SlabL,lty=2, col="darkblue", lwd=2)
+
+#####Plot paper####
+par(mfrow=c(2,2))
+plot(seq2, Spike, type="l", xlab="" , ylab="", lwd=2,
+     main="Prior Normal-spike",cex.main=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",m[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+lines(seq2, SlabpMoM,col="indianred3", lwd=2)
+lines(seq2, Slab,lty=3, col="darkblue", lwd=2)
+
+plot(seq2, SpikeL, type="l", xlab="" , ylab="", lwd=2,
+     main="Prior Laplace-spike",cex.main=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",m[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+#main="Prior Laplace-Spike", lwd=2)
+lines(seq2, SlabpMoML,col="indianred3", lwd=2)
+lines(seq2, SlabL,lty=3, col="darkblue", lwd=2)
+
+plot(seq, MOM, type="l", xlab= "", ylab="",col="indianred3",
+     main="Inclusion probability Normal-spike",cex.main=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",gamma[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+lines(seq,Normal,lty=2,col="darkblue")
+
+plot(seq, MoMLaplace, type="l", xlab="", ylab="",col="indianred3",
+     main="Inclusion probability Laplace-spike",cex.main=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",gamma[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+lines(seq,Laplace,lty=2,col="darkblue")
+
+dev.off()
+
+#####Plots paper B&W####
+par(mfrow=c(2,2))
+plot(seq2, Spike, type="l", xlab="" , ylab="", lwd=2,
+     main="Prior Normal-spike",cex.main=2,col="darkgrey")
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",m[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+lines(seq2, SlabpMoM, lwd=2)
+lines(seq2, Slab,lty=3, lwd=2)
+
+plot(seq2, SpikeL, type="l", xlab="" , ylab="", lwd=2,
+     main="Prior Laplace-spike",cex.main=2,col="darkgrey")
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",m[jk],"|.)")),
+      side = 2,line = 2, cex=1.25)
+#main="Prior Laplace-Spike", lwd=2)
+lines(seq2, SlabpMoML, lwd=2)
+lines(seq2, SlabL,lty=3, lwd=2)
+
+plot(seq, MOM, type="l", xlab= "", ylab="",
+     main="Inclusion probability Normal-spike",cex.main=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",gamma[jk],"|",m[jk],")")),
+      side = 2,line = 2, cex=1.25)
+lines(seq,Normal,lty=2)
+legend(.29, .25, legend=c("MOM-SS", "Normal-SS"),
+       lty=1:2, cex=.8,
+       box.lty=0,y.intersp=.25)
+
+plot(seq, MoMLaplace, type="l", xlab="", ylab="",
+     main="Inclusion probability Laplace-spike",cex.main=2)
+mtext(text = expression(m[jk]),
+      side = 1,line = 2, cex=1.25)
+mtext(text = expression(paste("P(",gamma[jk],"|",m[jk],")")),
+      side = 2,line = 2, cex=1.25)
+lines(seq,Laplace,lty=2)
+legend(.25, .25, legend=c("Laplace-MOM-SS", "Laplace-SS"),
+       lty=1:2, cex=.8,
+       box.lty=0,y.intersp=.25)
+
+dev.off() #Size 1250 1000

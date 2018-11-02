@@ -1,0 +1,53 @@
+load("~/Paper1806/1806FixMn100p1000q10NBDataset01.RData")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Plots_programs/plots_FA_V4.R")
+plot.scat(Omega%*%t(B),resultFlat_100$Ez%*%t(resultFlat_100$M)) #500 500
+plot.scat(Omega%*%t(B),Normal_100$Ez%*%t(PostM2(Normal_100)))
+plot.scat(Omega%*%t(B),MOM_100$Ez%*%t(PostM2(MOM_100)))
+plot.scat(Omega%*%t(B),resultLaplace_100_Vl20$Omega%*%t(resultLaplace_100_Vl20$B))
+plot.scat(Omega%*%t(B),model_lasso_100.Ez%*%t(as.matrix(model_lasso_100$loadings)))
+
+load("~/Paper1806/1806SparseMn100p1000q10NBDataset01.RData")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Plots_programs/plots_FA_V4.R")
+plot.scat(Omega%*%t(B),resultFlat_100$Ez%*%t(resultFlat_100$M)) #500 500
+plot.scat(Omega%*%t(B),Normal_100$Ez%*%t(PostM2(Normal_100)))
+plot.scat(Omega%*%t(B),MOM_100$Ez%*%t(PostM2(MOM_100)))
+plot.scat(Omega%*%t(B),resultLaplace_100_Vl20$Omega%*%t(resultLaplace_100_Vl20$B))
+plot.scat(Omega%*%t(B),model_lasso_100.Ez%*%t(as.matrix(model_lasso_100$loadings)))
+
+load("~/Paper1806/1806FixMn100p250q10BEDataset01.RData")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Plots_programs/plots_FA_V4.R")
+plot.scat(X%*%t(B),resultFlat_100$Ez%*%t(resultFlat_100$M))
+plot.scat(X%*%t(B),Normal_100$Ez%*%t(PostM2(Normal_100)))
+plot.scat(X%*%t(B),MOM_100$Ez%*%t(PostM2(MOM_100)))
+plot.scat(X%*%t(B),COMBAT_100$Z%*%t(COMBAT_100$Gamma))
+plot.scat(X%*%t(B),resultLaplace_100_Vl20$Omega%*%t(resultLaplace_100_Vl20$B))
+plot.scat(X%*%t(B),model_lasso_100.Ez%*%t(as.matrix(model_lasso_100$loadings)))
+
+load("~/Paper1806/1806SparseMn100p250q10BEDataset01.RData")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Plots_programs/plots_FA_V4.R")
+plot.scat(X%*%t(B),resultFlat_100$Ez%*%t(resultFlat_100$M))
+plot.scat(X%*%t(B),Normal_100$Ez%*%t(PostM2(Normal_100)))
+plot.scat(X%*%t(B),MOM_100$Ez%*%t(PostM2(MOM_100)))
+plot.scat(X%*%t(B),COMBAT_100$Z%*%t(COMBAT_100$Gamma))
+plot.scat(X%*%t(B),resultLaplace_100_Vl20$Omega%*%t(resultLaplace_100_Vl20$B))
+plot.scat(X%*%t(B),model_lasso_100.Ez%*%t(as.matrix(model_lasso_100$loadings)))
+
+
+LassoM<-as.matrix(model_lasso_100$loadings)
+colnames(LassoM)<-NULL
+rownames(LassoM)<-NULL
+plot.heat(LassoM)+scale_fill_gradient2(limits=c(-.5, .5))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+
+plot.heat(LassoM%*%t(LassoM)+diag(model_lasso_100$uniquenesses))+scale_fill_gradient2(limits=c(-.5, .5))+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())

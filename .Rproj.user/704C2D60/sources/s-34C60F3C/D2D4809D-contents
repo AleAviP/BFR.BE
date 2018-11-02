@@ -1,0 +1,146 @@
+# GIMH - Marginalisation using Grouped Independence Metropolis-Hastings
+
+# Function to estimate likelihood 
+approxiamateLikelihoodGIMH = function(
+  proposalSample,
+  proposalLogPDF,
+  unnormalisedJointLogPDF,
+  x,
+  m){
+  
+  # Sample new latent states
+  Z = proposalSample(m)
+  
+  # Evaluate the numerator of the weights - given by the unnormalised joint
+  weightsNumer = unnormalisedJointLogPDF(x,Z)
+  
+  # Evaluate the density of the latent states, providing the denominator of the weights 
+  weightsDenom = proposalLogPDF(Z)
+  
+  # Evaluate the likelihood estimate as the mean of the weights
+  likelihoodEstimate = mean(exp(weightsNumer-weightsDenom))
+  return(likelihoodEstimate)
+}
+
+
+#' @title GIMH marginal inference
+#' 
+#' @description Runs the inference algorithm for sampling from the marginal of a distribution.
+#' 
+#' The algorithm adjusts the standard Metropolis-Hastings algorithm to take into account the case 
+#' where it is undesireable for the Markov Chain to sample over all the latent dimensions. This results in an
+#' algorithm where the latent states have been marginalised out
+#' 
+#' @param seedValue Sets the random seed
+#' @param unnormalisedJointLogPDF(x,Z) Evaluates the log joint density of the target variable and the nuisance variable
+#' @param proposalSample(m) Samples from the proposal distribution over the nuisance variables
+#' @param proposalLogPDF(Z) Evaluates the density of the nuisance variables, used in finding the weights in the likelihood estimate
+#' @param transitionxSample(x) Samples the new candidate value of the target variable
+#' @param transitionxLogPDF(xcand,x) Evaluates the log density of the of the target variable's Markov chain
+#' @param x_initialguess Provides an initial value to the target variable
+#' 
+#' @return Returns a vector of \code{S} samples of the target variable under pseudo-marginalisation
+#' 
+#' @example R/GIMHtest.R
+#' 
+#' @export
+marginaliseGIMH = function(  seedValue = 1729L,
+                             unnormalisedJointLogPDF,
+                             proposalSample,
+                             proposalLogPDF,
+                             transitionxSample,
+                             transitionxLogPDF,
+                             x_initialguess,
+                             S = 1000,
+                             m = 1000){
+ 
+  # Sets the pseudo-random number's seed value
+  set.seed(seed = seedValue)
+  
+  # Initialise Markov chain for both the likelihood estimate and the target variable
+  x = x_initialguess
+  likeEst = approxiamateLikelihoodGIMH(proposalSample,proposalLogPDF,unnormalisedJointLogPDF,x,m)
+  
+  X = rep(0,S) # Allocate memory for the target variables
+  class(X)="ilike"
+  for (t in 1:S){ # Commence GIMH loop
+    
+    # Propose new target variable
+    xcand = transitionxSample(x)
+    # Evaluate new likelihood estimate
+    likeCandidate = approxiamateLikelihoodGIMH(proposalSample,proposalLogPDF,unnormalisedJointLogPDF,xcand,m)
+
+    # GIMH acceptance ratio
+    r = likeCandidate/likeEst * exp(transitionxLogPDF(x,xcand) - transitionxLogPDF(xcand,x))
+    
+    # Accept/reject with probability min(1,r)
+    if(runif(1) < r){
+      # If accept, then update target variable and likelihood estimate
+      x = xcand
+      likeEst = likeCandidate
+    }
+    
+    # Record current target variable in chain
+    X[t] = x
+  }
+  
+  # Return the chain of target variables
+  return(X)
+}
+
+#Create graphs
+plot.ilike=function(x,dnormal=TRUE){
+  x=as.numeric(x)
+  x1<-data.frame(x=x,simulation=1:length(x))
+  xn<-data.frame(x=(x-mean(x))/sd(x))
+  xd <- qnorm(ppoints(xn[,1]))
+  d <- data.frame(x=xd, y=sort(xn[,1]))
+  Xculm = array(data=NA,dim=length(x))
+  Xculm[1] = x[1]
+  for(i in 2:length(x)){
+    Xculm[i] = (x[i] + (i-1)*Xculm[i-1])/i
+  }
+  xculm<-data.frame(x=Xculm,simulation=1:length(x))
+  #acf
+  acf <- acf(x,type="correlation",plot = F)
+  acf_df <- data.frame(
+    acf = acf$acf,
+    lag = acf$lag
+  )
+  ci <- 0.95
+  clim <- qnorm((1 + ci)/2) / sqrt(acf$n.used)
+  p1<-ggplot(x1, aes(simulation,x))+ geom_line()+ 
+    ggtitle("MCMC Sample Paths")
+  p2<-ggplot(xculm, aes(simulation,x))+ geom_line()+ 
+    ggtitle("MCMC Cumulative Means")
+  p3<-ggplot(xn, aes(x=x))+ 
+    geom_histogram(aes(y = ..density..,fill=..count..),binwidth = 0.4)+ 
+    ggtitle("Histogram of MCMC Samples")+ 
+    stat_function(fun=function(x) dnorm(x), lintype=0.25, colour="dark blue")
+  p4 <- ggplot(d, aes(x=x, y=y)) +
+    geom_point() +
+    geom_line(aes(x=x, y=x),color="blue") +
+    labs(title="Normal Q-Q") +
+    xlab("Theretical Quantiles") +
+    ylab("Sample Quantiles")
+  p5<-qplot(lag, acf, data = acf_df, yend = 0, xend = lag, geom="segment") + 
+    geom_hline(colour = "grey50")+
+    geom_hline(yintercept = c(-clim, clim), colour = "blue",linetype = "dotdash") + 
+    ggtitle("Linear Autocorrelation of Simulations")
+  p6<-ggplot(xn, aes(x=x))+ 
+    geom_histogram(aes(y = ..density..,fill=..count..),binwidth = 0.25)+ 
+    ggtitle("Histogram of MCMC Samples")
+  if (dnormal==TRUE){
+    grid.arrange(p1,p2,p3,p4,ncol=2) 
+  }
+  else{
+    grid.arrange(p1,p2,p6,p5,ncol=2)
+  }
+}
+
+summary.ilike=function(x){
+  x=as.numeric(x)
+  y=x[1:(length(x)-1)] - x[2:length(x)]
+  acceptance.rate=length(y[y != 0])/(length(x) - 1)
+  cbind(describe(x)[2:5],describe(x)[8:12],acceptance.rate)
+}

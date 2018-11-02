@@ -1,0 +1,260 @@
+# ABC - Perform Approximate Bayesian Computing
+
+
+###
+### BEGIN AUXILIARY FUNCTIONS
+###
+
+differenceOfMeans = function(D1,D2){
+  return(abs(mean(D1) - mean(D2)))
+}
+
+computeAlpha = function(
+  x,
+  x_proposal,
+  Tx,
+  Sx,
+  symmetricProposal = TRUE,
+  proposalKernel = NA
+  ){
+  if(symmetricProposal){
+    alpha = min(1,(Sx)/(Tx))
+  } else if(is.function(proposalKernel)){
+    alpha = min(1,(Sx * prosalKernel(x_proposal,x))/(Tx * prosalKernel(x,x_proposal)))
+  } else {
+    stop("No proposal kernel specified (in spite of symmetricProposal==FALSE), or proposal-kernel of class other than function passed as argument.")
+  }
+  return(alpha)
+}
+
+# approxiamatePosteriorABC = function(
+#   x,
+#   m,
+#   N_y,
+#   sigma_y,
+#   indicator,
+#   X_prior
+#   ){
+#   y_sim = matrix(data=rnorm(N_y*m,x,sigma_y),nrow = m,ncol = N_y)
+#   y_indicator = apply(y_sim,1,indicator)
+#   return(X_prior(x)*sum(y_indicator)/m) # we here use that sum(v) applied to a boolean vector v returns the number of TRUE falues in v
+# }
+
+approxiamatePosteriorABC = function(
+  x,
+  sampleY_givenX, #sampleY(n,x) should return a vector of n samples of Y | X = x
+  m,
+  N_y,
+  indicator,
+  X_prior_pdf
+){
+  y_sim = matrix(data=sampleY_givenX(N_y*m,x),nrow = m,ncol = N_y)
+  y_indicator = apply(y_sim,1,indicator)
+  return(X_prior_pdf(x)*sum(y_indicator)/m) # we here use that sum(v) applied to a boolean vector v returns the number of TRUE falues in v
+}
+
+###
+### END AUXILIARY FUNCTIONS
+###
+
+
+#' Do MCMC with approximated likelihoods in a general case
+#' 
+#' @description This implements an ABC (Approximate Bayesian Computation) algoritm for doing MCMC.
+#' The advantage over classical MCMC algoritms is ABC does not require a tracteable formula
+#' for computing posterior densities analytically.
+#' 
+#' @param N_steps the number of steps to be taken by the algorithm + 1. Corresponds to the length of the output.
+#' @param y_obs a vector of measurements of y.
+#' @param epsilon a positive real number. Denotes the radius of the region around y_obs in which we accept imulated data.
+#' @param m an integer coresponding to the number of simulated measurements to make per step. Both epsilon and m affect
+#' the performance of the algorithm.
+#' @param x_initialGuess what it says; initial guess for the value of X
+# @param rdistX should be a function that returns samples from X
+#' @param ddistX should be the pdf of X (i.e. the PDF of the prior)
+#' @param sampleProposal should be a function that returns proposals x* for given values of x.
+#' In litterature often denoted as the random variable x* ~ Q(.|x).
+#' @param rdistY_givenX should be a function that returns samples from Y conditioned on the value of X; \code{rdistY_givenX(n,x)} should return \code{n} samples from Y|X=x.
+#' @param metric should be a function that accept two arguments of the type of y_obs and returns a positive number.
+#' Ought to be positive semidefinite and symmetric (i.e. both metric(y,y)=0 and metric(y,z)=metric(z,y) should hold
+#' up to numerical precision)
+#' @param proposalKernel the kernel of the proposalDistribution. Leave unspecified (or specify as NA) if symmetric.
+#' @param symmetricProposal a boolean indicating if a symmetric proposal kernel is used
+# @param type the type of likelihood approximation to be used. Should be \code{"ABC"}.
+#' 
+#' @return a vector of length \code{N_steps}
+#'
+#' @example R/exampleABC_1.R
+#  note that the above should be replaced by the path to the file exampleABC_1.R, relative to the root directory of the package.
+#'  
+#' @details  We consider the following scenario: Let X and Y be random variables satisfying Y|X=x.
+#' We assume that Y|X=x can be simulated. \code{rdistY_givenX(n,x)} should return \code{n} samples from Y|X=x.
+#' we aim to estimate the value of x, from a list of observations/measurements of Y (given by \code{y_obs}), 
+#' and a prior density on X (given by ddistX). We furthermore (as in the case of a regular MCMC algorithm) must specify an initial guess as to the value of X,
+#' and a mechanism for generating proposals. What sets the algorithm appart from a regular Metropolis-Hastings algorithm, is that
+#' we assume that the likelihood function is intractable, and must be approximated. This is one by for a proposed value
+#' of x, say x*, to simulate m times from (Y|X=x*)^(length(y_obs)), and counting the number of samples that lie close
+#' close to y_obs using the metric \code{metric}.
+#' @export ABC_MCMC
+
+ABC_MCMC = function(
+  N_steps = 5000,
+  y_obs = NA,
+  epsilon = 0.25,
+  m = 10,
+  x_initialGuess = NA,
+  sampleProposal = NA,
+  ddistX = NA,
+  rdistY_givenX = NA,
+  symmetricProposal = TRUE,
+  proposalKernel = NA,
+  metric = differenceOfMeans
+  ){
+
+  
+  
+## BEGIN VALIDATION OF INPUTS
+  
+  if(class(y_obs)=="logical"){
+    stop("ABC only works with observed data. Please specify some, by setting the value of y_obs")
+  }
+  
+  if(class(x_initialGuess)=="logical"){
+    stop("The generic ABC-algoritm requires an initial guess for the value of x to be made")
+  }
+  
+  if(class(ddistX)=="logical"){
+    stop("ddistX==NA ;a prior density must be specified for the ABC algorithm to work")
+  }
+  
+  if(!is.function(sampleProposal)){
+    stop("sampleProposal is not a function (if not set, it defaults to NA). A method for sampling from the proposal distribuition must be provided for the ABC algorithm to work")
+  }
+  
+  if(!is.function(rdistY_givenX)){
+    stop("rdistY_givenX is not a function (if not set, it defaults to NA). The ABC algorithm required a mechanism for sampling from Y|X=x in order to work")
+  }
+  
+  if(all.equal(ddistX(x_initialGuess),0)==TRUE){
+    warning("it appears that the provided initial guess does not lie in the support of the provided prior distribution")
+  }
+  
+  if(!(symmetricProposal | is.function(proposalKernel))){
+    stop("No proposal kernel specified (in spite of symmetricProposal==FALSE), or proposal-kernel of class other than function passed as argument.")
+  }
+  
+##END VALIDATION OF INPUT
+  
+  
+  
+  
+#BEGIN PRE-MCMC STEPS
+  
+  # how many data points to sample
+  N_y = length(y_obs)
+  
+  # this function should return TRUE if simulated data "D2" is close to y_obs, and FALSE otherwise
+  # it can be interpreted as the predicate P(D2) = "the distance from D2 to y_obs w.r.t. "metric" is < \epsilon"
+  indicator = function(D2){
+    return(metric(y_obs,D2) < epsilon)
+  }
+  
+  X = array(data=NA,dim=N_steps)
+  X[1] = x_initialGuess
+  
+  #initial estimate of the likelihood function is computed below. It is not allowed to be 0
+  Tx = approxiamatePosteriorABC(X[1],rdistY_givenX,m,N_y,indicator,ddistX)
+  
+  #guarantee that Tx is not 0
+  eps_Tx = 0.5*ddistX(X[1])/m
+  i_Tx = 1
+  i_Tx_Max = N_steps
+  while(Tx < eps_Tx & i_Tx < i_Tx_Max){ #up to rounding error Tx is 0
+    Tx = approxiamatePosteriorABC(X[1],rdistY_givenX,m,N_y,indicator,ddistX)
+    i_Tx = i_Tx +1
+  }    
+  if(i_Tx == i_Tx_Max){ #After sampling i_Tx_Max times, we have not managed a single time to sample Tx different from 0
+    Tx = eps_Tx
+    message("Unable to sample Tx different from 0. Manually setting to tiny value. Consider either making a better initial guess or increasing either m or epsilon")
+  }
+
+## END PRE-MCMC STEPS
+
+
+## BEGIN METROPOLIS HASTINGS ITERATION
+
+  for(n in 2:N_steps){
+    x_proposal = sampleProposal(X[n-1])
+    Sx = approxiamatePosteriorABC(x_proposal,rdistY_givenX,m,N_y,indicator,ddistX)
+    alpha = computeAlpha(X[n-1],x_proposal,Tx,Sx,symmetricProposal,proposalKernel)
+    if(runif(1) < alpha){ #accept
+      X[n] = x_proposal
+      Tx = Sx
+      #acceptanceCount = acceptanceCount+1
+    }else{ #reject
+      X[n] = X[n-1]
+    }
+  }
+
+## END METROPOLIS HASTINGS ITERATION
+  
+  class(X) = "ilike" # Our custom plotting functions will handle objects of this class in a specific manner.
+  return(X)
+}
+
+
+#' Use ABC_MCMC, to infer p(x | y_obs), in the toy example of Mattis.
+#' (slides availiable at http://www.stats.ox.ac.uk/~evans/CDT/intractable.pdf for now)
+#' Parameters are largely the same as in ABC_MCMC. Only a couple of extra parameters specific to the toy-example are added.
+#' 
+#' @param seedValue The function is engineered to always use the seed 1729L unless otherwise specified, so that outputs are reproducible.
+#' 
+#' @description In the toy example of Mattis, we considere the following set of random variables:
+#'    x ~ N(0,sigma_x);
+#'  y|x ~ N(x,sigma_y);
+#'  both sigma_x and sigma_y default to 1. We use a standard gaussian kernel for the proposals, and a standard gaussian for the prior distribution on X
+
+ABC.demo = function(
+  seedValue = 1729L,
+  sigma_x = 1,
+  sigma_y = 1,
+  x_true = 0.4,
+  y_obs = NULL, # If left as Null, y_obs will be set to rnorm(50, mean = x_true, sd = sigma_y), after the seed has been set.
+  x_initialGuess = 0,
+  sampleProposal = function(x){return(rnorm(1,x,1))}, # Note that the proposal is symetric
+  ddistX = function(x){return(dnorm(x,mean = x_initialGuess, sd = sigma_x))},
+  epsilon = 0.15,
+  m = 20,
+  rdistY_givenX = function(n,x){return(rnorm(n, mean = x, sd = sigma_y))},
+  N_steps = 3000,
+  proposalKernel = NA,
+  symmetricProposal = TRUE,
+  metric = differenceOfMeans
+  ){
+
+  set.seed(seed = seedValue)
+
+  #now that the seed has been set, we can generate y_obs
+  if(is.null(y_obs)){
+    y_obs = rnorm(50, mean = x_true, sd = sigma_y)
+  }
+  
+  #Do Simulations
+  X = ABC_MCMC( N_steps = N_steps,
+                y_obs = y_obs,
+                epsilon=epsilon,
+                m = m,
+                x_initialGuess = x_initialGuess,
+                sampleProposal = sampleProposal,
+                ddistX = ddistX,
+                rdistY_givenX = rdistY_givenX,
+                symmetricProposal = symmetricProposal,
+                proposalKernel = proposalKernel,
+                metric = metric
+                )
+
+  # Generate some outputs.
+  print(summary(X))
+  
+  plot(X,TRUE)
+}

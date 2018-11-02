@@ -1,0 +1,136 @@
+FN.CV.BE.weighted<-function(FA,X,V,B,group){
+  q <- ncol(FA[[1]]$M)
+  k.cv <- length(FA)
+  I.q <- diag(q)
+  n <- nrow(X)
+  if(!is.null(B)){
+    p_b <- ncol(B)
+    EZ=llply(.data = 1:k.cv, .fun = function(y){
+      #print(y)
+      if(is.matrix(V)){
+        X.hat<-X[group[[y]],]-cbind(V[group[[y]],],B[group[[y]],])%*%t(FA[[y]]$Theta)
+      }else{
+        X.hat<-X[group[[y]],]-cbind(V[group[[y]]],B[group[[y]],])%*%t(FA[[y]]$Theta)
+      }
+      B.group<-B[group[[y]],]
+      n.test<-nrow(B.group)
+      index.aux<-c(1:n.test)
+      index.aux.sort<-unlist(lapply(1:p_b, function(k) index.aux[B.group[,k]==1]))
+      z.list<-lapply(1:p_b, function(k) E.Z(X.hat[c(1:n.test)[B.group[,k]==1],],FA[[y]]$M,FA[[y]]$sigma[,k],I.q)$z)
+      z<-Reduce('rbind', z.list)
+      z<-z[order(index.aux.sort),]
+      return(z)
+    }, .parallel = FALSE)
+    FN.X.test=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      if(is.matrix(V)){
+        X.dif<-X[group[[y]],]-
+          (EZ[[y]]%*%t(PostM2(FA[[y]]))+cbind(V[group[[y]],],B[group[[y]],])%*%t(FA[[y]]$Theta))
+      }else{
+        X.dif<-X[group[[y]],]-
+          (EZ[[y]]%*%t(PostM2(FA[[y]]))+cbind(V[group[[y]]],B[group[[y]],])%*%t(FA[[y]]$Theta))
+      }
+      B.group<-B[group[[y]],]
+      n.test<-nrow(B.group)
+      norm.test<-lapply(1:p_b, function(k)
+        norm(X.dif[c(1:n.test)[B.group[,k]==1],]%*%diag(1/FA[[y]]$sigma[,k]),type ="F"))
+      norm.test<-Reduce('+', norm.test)
+      return(norm.test)
+    }, .parallel = FALSE))
+    FN.X.train=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      if(is.matrix(V)){
+        X.dif<-X[-group[[y]],]-
+          (FA[[y]]$Ez%*%t(PostM2(FA[[y]]))+cbind(V[-group[[y]],],B[-group[[y]],])%*%t(FA[[y]]$Theta))
+      }else{
+        X.dif<-X[-group[[y]],]-
+          (FA[[y]]$Ez%*%t(PostM2(FA[[y]]))+cbind(V[-group[[y]]],B[-group[[y]],])%*%t(FA[[y]]$Theta))
+      }
+      B.group<-B[-group[[y]],]
+      n.train<-nrow(B.group)
+      norm.train<-lapply(1:p_b, function(k)
+        norm(X.dif[c(1:n.train)[B.group[,k]==1],]%*%diag(1/FA[[y]]$sigma[,k]),type ="F"))
+      norm.train<-Reduce('+', norm.train)
+      return(norm.train)
+    }, .parallel = FALSE))
+  }else{
+    Z=llply(.data = 1:k.cv, .fun = function(y){
+      E.Z(X[group[[y]],],FA[[y]]$M,FA[[y]]$sigma,I.q)$z
+    }, .parallel = FALSE)
+    FN.X.test=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      norm((X[group[[y]],]-Z[[y]]%*%t(PostM2(FA[[y]])))%*%diag(1/FA[[y]]$sigma),type ="F")
+    }, .parallel = FALSE))
+    FN.X.train=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      norm((X[-group[[y]],]-FA[[y]]$Ez%*%t(PostM2(FA[[y]])))%*%diag(1/FA[[y]]$sigma),type ="F")
+    }, .parallel = FALSE))
+  }
+  return(list(X.test=FN.X.test,
+              X.train=FN.X.train))
+}
+
+FN.CV.BE.jk.weighted<-function(FA,X,V,B,group){
+  q <- ncol(FA[[1]]$M)
+  k.cv <- length(FA)
+  I.q <- diag(q)
+  n <- nrow(X)
+  if(!is.null(B)){
+    p_b <- ncol(B)
+    EZ=llply(.data = 1:k.cv, .fun = function(y){
+      #print(y)
+      if(is.matrix(V)){
+        X.hat<-X[group[[y]],]-cbind(V[group[[y]],],B[group[[y]],])%*%t(FA[[y]]$Theta)
+      }else{
+        X.hat<-X[group[[y]],]-cbind(V[group[[y]]],B[group[[y]],])%*%t(FA[[y]]$Theta)
+      }
+      B.group<-B[group[[y]],]
+      n.test<-nrow(B.group)
+      index.aux<-c(1:n.test)
+      index.aux.sort<-unlist(lapply(1:p_b, function(k) index.aux[B.group[,k]==1]))
+      z.list<-lapply(1:p_b, function(k) E.Z(X.hat[c(1:n.test)[B.group[,k]==1],],FA[[y]]$M,FA[[y]]$sigma[,k],I.q)$z)
+      z<-Reduce('rbind', z.list)
+      z<-z[order(index.aux.sort),]
+      return(z)
+    }, .parallel = FALSE)
+    FN.X.test=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      if(is.matrix(V)){
+        X.dif<-X[group[[y]],]-
+          (EZ[[y]]%*%t(PostM(FA[[y]]))+cbind(V[group[[y]],],B[group[[y]],])%*%t(FA[[y]]$Theta))
+      }else{
+        X.dif<-X[group[[y]],]-
+          (EZ[[y]]%*%t(PostM(FA[[y]]))+cbind(V[group[[y]]],B[group[[y]],])%*%t(FA[[y]]$Theta))
+      }
+      B.group<-B[group[[y]],]
+      n.test<-nrow(B.group)
+      norm.test<-lapply(1:p_b, function(k)
+        norm(X.dif[c(1:n.test)[B.group[,k]==1],]%*%diag(1/FA[[y]]$sigma[,k]),type ="F"))
+      norm.test<-Reduce('+', norm.test)
+      return(norm.test)
+    }, .parallel = FALSE))
+    FN.X.train=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      if(is.matrix(V)){
+        X.dif<-X[-group[[y]],]-
+          (FA[[y]]$Ez%*%t(PostM(FA[[y]]))+cbind(V[-group[[y]],],B[-group[[y]],])%*%t(FA[[y]]$Theta))
+      }else{
+        X.dif<-X[-group[[y]],]-
+          (FA[[y]]$Ez%*%t(PostM(FA[[y]]))+cbind(V[-group[[y]]],B[-group[[y]],])%*%t(FA[[y]]$Theta))
+      }
+      B.group<-B[-group[[y]],]
+      n.train<-nrow(B.group)
+      norm.train<-lapply(1:p_b, function(k)
+        norm(X.dif[c(1:n.train)[B.group[,k]==1],]%*%diag(1/FA[[y]]$sigma[,k]),type ="F"))
+      norm.train<-Reduce('+', norm.train)
+      return(norm.train)
+    }, .parallel = FALSE))
+  }else{
+    Z=llply(.data = 1:k.cv, .fun = function(y){
+      E.Z(X[group[[y]],],FA[[y]]$M,FA[[y]]$sigma,I.q)$z
+    }, .parallel = FALSE)
+    FN.X.test=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      norm((X[group[[y]],]-Z[[y]]%*%t(PostM(FA[[y]])))%*%diag(1/FA[[y]]$sigma),type ="F")
+    }, .parallel = FALSE))
+    FN.X.train=unlist(llply(.data = 1:k.cv, .fun = function(y){
+      norm((X[-group[[y]],]-FA[[y]]$Ez%*%t(PostM(FA[[y]])))%*%diag(1/FA[[y]]$sigma),type ="F")
+    }, .parallel = FALSE))
+  }
+  return(list(X.test=FN.X.test,
+              X.train=FN.X.train))
+}
+

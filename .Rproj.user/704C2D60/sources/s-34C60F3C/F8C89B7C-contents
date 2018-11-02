@@ -1,0 +1,1004 @@
+rm(list=ls())
+require(rlist)
+library(TCGA2STAT)
+library(clusterSim)
+library(sva)
+library(caret)
+require(cate)
+library(curatedOvarianData)
+library(survival)
+library(survcomp)
+
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/BE.BFA.EM/R/BFA.EM.BE.CV.V1.R")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/BE.BFA.EM/R/BFA.EM.BE.FUN.CV.V1.R")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/Veronikas/FA_CODE/FACTOR_CODE_update.R")
+source("/Users/alejandraavalospacheco/Dropbox/OxWaSP/Programing/BFA/faNPD.R")
+
+LUSC.G450<-getTCGA(disease="LUSC", data.type="mRNA_Array", type="G450", clinical=TRUE)
+dim(LUSC.G450$dat) #17814   154
+head(LUSC.G450$dat[,1:3])
+LUSC.U133<-getTCGA(disease="LUSC", data.type="mRNA_Array", type="U133", clinical=TRUE, cvars="yearstobirth")
+dim(LUSC.U133$dat) #12042   133
+head(LUSC.U133$dat[,1:3])
+LUSC.Huex<-getTCGA(disease="LUSC", data.type="mRNA_Array", type="Huex", clinical=TRUE, cvars="yearstobirth")
+dim(LUSC.Huex$dat) #18632   112
+head(LUSC.Huex$dat[,1:3])
+
+#Combine function
+combine3 <- function(X1, X2) {
+  fids <- intersect(featureNames(X1), featureNames(X2))
+  X1 <- X1$dat[fids,]
+  X2 <- X2$dat[fids,]
+  cbind(X1,X2)
+}
+
+X<- combine3(LUSC.U133,LUSC.Huex)
+dim(X) #11975   245
+batch<-c(rep("U133",ncol(LUSC.U133$dat)),
+         rep("Huex",ncol(LUSC.Huex$dat)))
+
+var <- data.frame(variance = apply(X,1,var))
+ggplot(var, aes(x=variance))+
+  geom_histogram(aes(y = ..density..,fill=..count..),binwidth = 0.25)+
+  theme_bw()+
+  geom_vline(xintercept = quantile(var$variance,.90),colour="indianred3", linetype = 2, size = 1.5)
+
+index.var <- c(1:nrow(X))[var$variance>quantile(var$variance,.90)]
+X_var=X[index.var,]
+dim(X_var) #1198  245
+
+#Normalising data
+#X_var_std<-data.Normalization (X_var,type="n1",normalization="row")
+#X_var_std<-data.Normalization (t(X_var),type="n1",normalization="column")
+
+X_var_aux=preProcess(t(X_var), method=c("center", "scale"))
+X_var_std <- predict(X_var_aux, t(X_var))
+
+#Adding more variables
+n = ncol(X_var) #245
+p = nrow(X_var) #1198
+B = matrix(ncol=2, c(ifelse(batch=="U133",1,0),ifelse(batch=="U133",0,1)))
+p_b = ncol(B)
+V = as.factor(matrix(nrow=n,c(LUSC.U133$merged.dat[,"YEARSTOBIRTH"],LUSC.Huex$merged.dat[,"YEARSTOBIRTH"])))
+p_v = ncol(V)
+
+#####CV
+set.seed(123)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group)$X.test)
+fnFlat100r=mean(FN.CV.BE.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+Flat_100_old=Flat_100
+Flat_100_2=BFR.BE.EM.CV(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",CV=TRUE)
+Flat_100=Flat_100_2
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                        mj_hat=sum(Flat_100$M!=0),
+                        Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                        FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                        FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                          mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                          mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",1))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",1))
+
+#####CV
+set.seed(124)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",2))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",2))
+
+#####CV
+set.seed(125)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",3))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",3))
+
+#####CV
+set.seed(126)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",4))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",4))
+
+#####CV
+set.seed(127)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",5))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",5))
+
+#####CV
+set.seed(128)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",6))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",6))
+
+#####CV
+set.seed(129)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",7))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",7))
+#####CV
+set.seed(130)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",8))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",8))
+#####CV
+set.seed(131)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",9))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",9))
+
+#####CV
+set.seed(132)
+index.cv<-c(1:n)
+group<-list()
+for (i in 1:10){
+  group[[i]]<-sample(index.cv,trunc(n/10),replace=FALSE)
+  index.cv<-index.cv[!index.cv%in%group[[i]]]
+}
+
+resultFlat_100_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat")
+}, .parallel = FALSE)
+
+#Varimax
+resultFlat_100_var_CV= llply(.data = 1:10, .fun = function(y){
+  print(y)
+  BFA.EM.BE(x=X_var_std[-group[[y]],], v=V[-group[[y]]], b=B[-group[[y]],], q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=TRUE)
+}, .parallel = FALSE)
+
+fnFlat100nr=mean(FN.CV.BE.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100r=mean(FN.CV.BE.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjk=mean(FN.CV.BE.jk.ov(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjk=mean(FN.CV.BE.jk.ov(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100r,fnFlat100rjk)<=min(fnFlat100nr,fnFlat100nrjk)) #TRUE
+
+fnFlat100nrW=mean(FN.CV.BE.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rW=mean(FN.CV.BE.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100nrjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+fnFlat100rjkW=mean(FN.CV.BE.jk.ov.weighted(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test)
+(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)) #FALSE
+
+Flat_100=BFA.EM.BE(x=X_var_std, v=V, b=B, q = 100, eps = 0.001,it=100, epsM=0.05, prior="Flat",varimax=(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)))
+
+####Survival analysis####
+# Fit Cox Model
+survival_data = data.frame(days2death=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"daystodeath"],
+                                                   LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"daystodeath"])),
+                           stage=as.factor(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"pathologicstage"],
+                                             LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"pathologicstage"])),
+                           age=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"yearstobirth"],
+                                            LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"yearstobirth"])),
+                           status=as.numeric(c(LUSC.U133$clinical[LUSC.U133$merged.dat[,1],"vitalstatus"],
+                                               LUSC.Huex$clinical[LUSC.Huex$merged.dat[,1],"vitalstatus"])))
+
+survival_data$days2death[is.na(survival_data$days2death)]=0
+# Kaplan Meier Survival Curve
+y_surv <- Surv(survival_data$days2death,survival_data$status)
+#CV
+y_CV=llply(.data = 1:10, .fun = function(k){
+  Surv(survival_data$days2death[-group[[k]]], survival_data$status[-group[[k]]])
+}, .parallel = FALSE)
+
+#Flat
+#All
+Model_Flat<-data.frame(y=y_surv,Flat_100$Ez[,1:85])
+form_Flat <- formula(y ~ .,Model_Flat)
+cox_bmt_Flat <- coxph(form_Flat,data = Model_Flat)
+summary(cox_bmt_Flat)$concordance[1]
+#CV
+Model_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+    data.frame(y=y_CV[[k]],resultFlat_100_var_CV[[k]]$Ez[,1:85])
+  }else{
+    data.frame(y=y_CV[[k]],resultFlat_100_CV[[k]]$Ez[,1:85])
+  }
+
+}, .parallel = FALSE)
+cox_bmt_CV_Flat=llply(.data = 1:10, .fun = function(k){
+  coxph(formula(y ~ .,Model_CV_Flat[[k]]),data = Model_CV_Flat[[k]])
+}, .parallel = FALSE)
+Cox_train_Flat<-unlist(lapply(1:10, function(k) summary(cox_bmt_CV_Flat[[k]])$concordance[1]))
+#Ez of test
+if(min(fnFlat100rW,fnFlat100rjkW)<=min(fnFlat100nrW,fnFlat100nrjkW)){
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_var_CV,group,100)
+}else{
+  EZ_test_Flat<-Ez.test.ov(X_var_std,V,B,resultFlat_100_CV,group,100)
+}
+predictions_CV_Flat_test=lapply(1:10, function(k) predict(cox_bmt_CV_Flat[[k]],data.frame(EZ_test_Flat[[k]])))
+Cox_test_Flat <-unlist(lapply(1:10, function(k) concordance.index(x=predictions_CV_Flat_test[[k]],surv.time=survival_data$days2death[group[[k]]],surv.event=survival_data$status[group[[k]]])$c.index))
+mean(Cox_test_Flat)
+
+tableFlat<-data.frame(q_hat=sum(Flat_100$gTheta!=0),
+                      mj_hat=sum(Flat_100$M!=0),
+                      Cox_mean=mean(Cox_test_Flat,na.rm =TRUE),
+                      FN_X_test=min(fnFlat100r,fnFlat100rjk,fnFlat100nr,fnFlat100nrjk),
+                      FN_Cov_test=min(c(fnFlat100rW,fnFlat100rjkW,fnFlat100nrW,fnFlat100nrjkW,
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_CV,X=X_var_std,V=V,B=B,group,100)$X.test),
+                                        mean(FN.CV.BE.test.NP.W(resultFlat_100_var_CV,X=X_var_std,V=V,B=B,group,100)$X.test))))
+
+tableFlat
+write.csv(tableFlat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810TableFlat%g",10))
+write.csv(Cox_test_Flat, sprintf("~/Dropbox/OxWaSP/Programing/BFA/Cancer_datasets/TablesLUN/1810CoxFlat%g",10))
+

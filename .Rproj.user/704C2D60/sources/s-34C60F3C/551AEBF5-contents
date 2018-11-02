@@ -1,0 +1,50 @@
+
+GIMH.demo = function(){
+#' Simple script to implement the GIMH marginalisation in a toy example:
+#'
+#' 
+#' Example:
+#'    p(y,x) = p(y|x)p(x)
+#'    where p(y|x) = N(x,sigma_y^2) and p(x) = N(0,sigma_x^2)
+#' 
+#' The proposal distribution over the latent states is defined to be:
+#'    z ~ h(z) = N(0,sigma_h^2)
+#'    
+#' The transition kernel is of the form y_{t+1} = N(y_t,sigma_q^2)
+#' 
+
+sigma_h = 6
+proposalLogPDF = function(Z){ dnorm(Z,0,sigma_h,log = TRUE) }
+proposalSample = function(m){ rnorm(m,0,sigma_h) }
+
+sigma_x = 3
+sigma_y = 4
+unnormalisedJointLogPDF = function(x,Z){
+  dnorm1 = function(zi){ dnorm(x,zi,sigma_y,log = TRUE)}
+  px = dnorm(Z,0,sigma_x,log = TRUE)
+  pygx = sapply(Z,dnorm1)
+  return(px+pygx)
+}
+
+sigma_q = 10
+transitionx = function(x){return(rnorm(1,x,sigma_q))}
+transitionxPDFlog = function(xnew,x){return(dnorm(xnew,x,sigma_q,log = TRUE))}
+
+
+
+out = marginaliseGIMH(seedValue = 1729L,
+                      unnormalisedJointLogPDF,
+                      proposalSample,
+                      proposalLogPDF,
+                      transitionx,
+                      transitionxPDFlog,
+                      x_initialguess = 3,
+                      S = 5000,
+                      m = 1000)
+
+#Do something with the result
+print(summary(out))
+
+#Plotting the result
+plot(out)
+}
