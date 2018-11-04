@@ -1,12 +1,29 @@
 #Plots Toy Examples
-plot.heat = function(X){
+plot.heat <- function(X,Xlab="",Ylab="",limit=c(-3,3),rotation=FALSE){
   X = as.matrix(X)
+  colnames(X)<-NULL
+  rownames(X)<-NULL
+  p<-nrow(X)
+  q<-ncol(X)
+  index<-apply(X,2,sum)!=0
+  if(sum(index!=0)!=q){
+    X<-cbind(X[,c(1:q)[apply(X,2,sum)!=0]],matrix(ncol=(q-sum(apply(X,2,sum)!=0)),nrow=p,0))
+  }
+  if(rotation==TRUE){
+    X<-varimax(X)$loadings%*%diag(q)
+  }
   x = melt(X)
   p_X_heat = ggplot(data = x, aes(x=X2, y=-X1, fill=value)) +
     theme_bw() +
     geom_tile(show.legend = F) +
-    xlab("q") +
-    ylab("p")
+    xlab(Xlab) +
+    ylab(Ylab) +
+    theme(axis.title=element_text(size=14,face="bold"),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank())+
+    scale_fill_gradient2(limits=limit)
   return(p_X_heat)
 }
 
@@ -19,28 +36,27 @@ plot.scat = function(X,X_recons){
   return(p_X)
 }
 
-plot.hist = function(X,X_recons,normal=FALSE){
-  X_dif = data.frame(difference=c(X-X_recons))
-  p1 = ggplot(X_dif, aes(x=difference))+
-    geom_histogram(aes(y = ..density..,fill=..count..),binwidth = 0.25)+
-    ggtitle("Histogram") +
-    theme_bw()+
-    theme(axis.title=element_text(size=15,face="bold"))
-  if (normal==TRUE){
-    p1 = p1+stat_function(fun=function(x) dnorm(x), linetype=1, colour="dark blue", size =1.25)
-  }
-  return(p1)
-}
-
-plot.trace = function(X,X_recons){
-  XPlot = X_recons
-  for (i in 1:ncol(X_recons)){
-    XPlot[,i] = X_recons[,i]/X[i]
-  }
-  meltXplot <- melt(XPlot)
-  p_X = ggplot(meltXplot,aes(x=Var1,y=value,colour=as.factor(Var2),group=Var2)) + geom_line(size =1.5)+
+plot.heat.cov <- function(M,Sigma,Xlab="",Ylab="",limit=c(-8,8)){
+  M = as.matrix(M)
+  colnames(M)<-NULL
+  rownames(M)<-NULL
+  Sigma = as.matrix(Sigma)
+  colnames(Sigma)<-NULL
+  rownames(Sigma)<-NULL
+  X = M%*%t(M)+Sigma
+  x = melt(X)
+  p_X_heat = ggplot(data = x, aes(x=X2, y=-X1, fill=value)) +
     theme_bw() +
-    xlab("Iteration") +  theme(legend.position="none") +ylab("Parameter estimation / True Parameter")
+    geom_tile(show.legend = F) +
+    xlab(Xlab) +
+    ylab(Ylab) +
+    theme(axis.title=element_text(size=14,face="bold"),
+          axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank())+
+    scale_fill_gradient2(limits=limit)
+  return(p_X_heat)
 }
 
 multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
@@ -78,3 +94,4 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
     }
   }
 }
+

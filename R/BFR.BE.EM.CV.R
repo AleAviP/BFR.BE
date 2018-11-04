@@ -79,6 +79,7 @@ BFR.BE.EM.CV <- function(x,v=NULL,b=NULL,q=2,eps=0.001,it=100,epsM=0.05,
   }
   return(list(varimax=result_var,
               novarimax=result,
+              group=group,
               M=model$M,
               sigma=model$sigma,
               Ez=model$Ez,
