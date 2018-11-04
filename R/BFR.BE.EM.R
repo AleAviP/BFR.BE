@@ -16,7 +16,7 @@
 #' @param intercept adds intercept to the Bayesian factor regression.
 #' @param varimax TRUE for initial varimax rotated loadings.
 #' @return A list with the optimised parameters.
-#' @example /examples/exampleCV.R
+#' @example /examples/example.R
 #'
 #####General algorithm###
 BFR.BE.EM <- function(x,v=NULL,b=NULL,q=2,eps=0.001,it=100,epsM=0.05,

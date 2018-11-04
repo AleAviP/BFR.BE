@@ -62,5 +62,5 @@ E <- rmvnorm(n,numeric(p),diag(p))
 Z <- rmvnorm(n,numeric(q),diag(q))
 X <- Z\%*\%t(M) + E
 
-result=BFR.BE.EM.CV(x=X, q = 10,varianceBE=FALSE)
+result=BFR.BE.EM(x=X, q = 10,varianceBE=FALSE)
 }
