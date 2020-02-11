@@ -21,7 +21,7 @@
 #####General algorithm###
 BFR.BE.EM.CV <- function(x,v=NULL,b=NULL,q=2,eps=0.001,it=100,epsM=0.05,
                          prior="N.MOM",varianceBE=TRUE,init=NULL,hyper=NULL,
-                         seed=123,scaling=FALSE,intercept=FALSE,varimax=FALSE,
+                         seed=10,scaling=TRUE,intercept=FALSE,varimax=FALSE,
                          CV=TRUE,folds=10){
 
   set.seed(seed)
