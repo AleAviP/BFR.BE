@@ -722,10 +722,10 @@ FNormXhatC<-function(Ez,M_hat,X){
 }
 
 #Ez.std
-FA.ov<-function(FA,B){
+FA.ov<-function(FA,B,q=100){
   p_b<-ncol(B)
   n<-nrow(FA$Ez)
   FA_z<-Reduce('rbind', llply(.data = 1:p_b, .fun = function(y){
-      FA$Ez[c(1:n)[B[,y]==1],]%*%solve(t(FA$M/FA$sigma[,y])%*%FA$M+diag(100))
+      FA$Ez[c(1:n)[B[,y]==1],]%*%solve(t(FA$M/FA$sigma[,y])%*%FA$M+diag(q))
     }, .parallel = FALSE))
 }
