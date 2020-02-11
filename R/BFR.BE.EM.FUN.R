@@ -729,3 +729,14 @@ FA.ov<-function(FA,B,q=100){
       FA$Ez[c(1:n)[B[,y]==1],]%*%solve(t(FA$M/FA$sigma[,y])%*%FA$M+diag(q))
     }, .parallel = FALSE))
 }
+
+#Scale X
+x.scale<-function(x){
+  p<-ncol(x)
+  x_var_col<-apply(x,2,sd)
+  x_mean_col<-apply(x,2,mean)
+  x_scale=Reduce("cbind",llply(.data = 1:p, .fun = function(k){
+    (x[,k]-x_mean_col[k])/x_var_col[k]
+  }, .parallel = FALSE))
+  return(x_scale)
+}
