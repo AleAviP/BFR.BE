@@ -1,5 +1,5 @@
 #Plots Toy Examples
-plot.heat <- function(X,Xlab="",Ylab="",limit=c(-3,3),rotation=FALSE){
+plot.heat <- function(X,Xlab="",Ylab="",limit=c(-2,2),rotation=FALSE){
   X = as.matrix(X)
   colnames(X)<-NULL
   rownames(X)<-NULL
@@ -13,6 +13,7 @@ plot.heat <- function(X,Xlab="",Ylab="",limit=c(-3,3),rotation=FALSE){
     X<-varimax(X)$loadings%*%diag(q)
   }
   x = melt(X)
+  colnames(x)<-c("X1","X2","value")
   p_X_heat = ggplot(data = x, aes(x=X2, y=-X1, fill=value)) +
     theme_bw() +
     geom_tile(show.legend = F) +
@@ -36,7 +37,7 @@ plot.scat = function(X,X_recons){
   return(p_X)
 }
 
-plot.heat.cov <- function(M,Sigma,Xlab="",Ylab="",limit=c(-8,8)){
+plot.heat.cov <- function(M,Sigma,Xlab="",Ylab="",limit=c(-2,2)){
   M = as.matrix(M)
   colnames(M)<-NULL
   rownames(M)<-NULL
@@ -45,6 +46,7 @@ plot.heat.cov <- function(M,Sigma,Xlab="",Ylab="",limit=c(-8,8)){
   rownames(Sigma)<-NULL
   X = M%*%t(M)+Sigma
   x = melt(X)
+  colnames(x)<-c("X1","X2","value")
   p_X_heat = ggplot(data = x, aes(x=X2, y=-X1, fill=value)) +
     theme_bw() +
     geom_tile(show.legend = F) +
